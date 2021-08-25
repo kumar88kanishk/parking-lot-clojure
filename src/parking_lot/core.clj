@@ -6,33 +6,65 @@
   {:cycle 1
    :car 2
    :bus 4})
+
 (defn create-parking-lot [m n]
   (swap! parking-lot-state (fn [s]
                              (reduce (fn [coll item]
-                                       (assoc coll (keyword (str item)) (into [] (take n (repeat 1)))))
+                                       (assoc coll (keyword (str item)) (into [] (take n (repeat nil)))))
                                      {}
                                      (range m)))))
 
-(defn park [veh-type veh-num]
-  (let [weight (get parking-lot-bindings (keyword veh-type))
-        search-space (reduce-kv
+(defn veh-weight [veh-type] (get parking-lot-bindings (keyword veh-type)))
+
+(defn search-level [weight]
+  (let [search-level (reduce-kv
                       (fn [acc k v]
-                        (let [availability (reduce + v)]
-                          (if (< weight availability) (reduced (conj acc k)) (conj acc k))))
-                      []
+                        (let [availability (count (filter nil? v))]
+                          (if (<= weight availability) (reduced k) acc)))
+                      nil
                       @parking-lot-state)]
-    search-space))
+    search-level))
 
+(defn new-parking-state [weight veh-num cs]
+  (loop [current cs
+         prevs []
+         avail []]
 
+    (if (empty? current)
+      (concat prevs avail)
+      (if (nil? (first current))
+                                  ;; space is available
+        (let [new-avail (conj avail (first current))]
+          (if (= (count new-avail) weight)
+            (concat prevs (repeat weight {:num veh-num}) (next current))
+            (recur (next current) prevs (concat avail (take 1 current)))))
+                                  ;; space not found
+        (recur (next current)
+               (concat prevs avail (take 1 current))
+               [])))))
 
+(defn park [veh-type veh-num]
+  (if-let [weight (veh-weight veh-type)]
+    (if-let [space (search-level weight)]
+      (let [updated-state (update-in @parking-lot-state [space]
+                                     (fn [current-state] (into [] (new-parking-state weight veh-num current-state))))]
+        (swap! parking-lot-state (fn [old-state] (merge old-state updated-state))))
+      "No Space")
+    "Invalid Vehicle Type"))
 
-(defn park-vehicles [queue]
-  (let [weighted-queue (map
-                        #(cond (= % "car") 2
-                               (= % "bus") 4
-                               (= % "cycle") 1)
-                        queue)]
-    weighted-queue))
+(defn exit-park [veh-num]
+  (let [updated-state (reduce-kv
+                       (fn [acc k v]
+                         (assoc acc k (mapv
+                                       (fn [item] (if (= (get item :num) veh-num)
+                                                    nil
+                                                    item))
+                                       v)))
+                       {}
+                       @parking-lot-state)]
+    (if (= @parking-lot-state updated-state)
+      "No Vehicle Found"
+      (swap! parking-lot-state (fn [old-state] (merge old-state updated-state))))))
 
 (comment
 
@@ -43,12 +75,6 @@
 
   (create-parking-lot 4 4)
 
-  (park "car" "UP32DY3659")
+  (park "bus" "UP32DD5000")
 
-  (park-vehicles ["car" "bus" "cycle"])
-  (reduce (fn [coll item]
-            (assoc coll (keyword (str item)) (into [] (range 4))))
-          {}
-          (range 4))
-  (swap! parking-lot-state (fn [state] {}))
-  (mapv (fn [a]) (range 4)))
+  (exit-park "UP32DY3659"))
