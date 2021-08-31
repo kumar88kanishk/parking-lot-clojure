@@ -1,6 +1,7 @@
 (ns parking-lot.core)
 
 (def parking-lot-state (atom {}))
+(def is-parking-full (atom false))
 
 (def parking-lot-bindings
   {:cycle 1
@@ -48,11 +49,12 @@
     (if-let [space (search-level weight)]
       (let [updated-state (update-in @parking-lot-state [space]
                                      (fn [current-state] (into [] (new-parking-state weight veh-num current-state))))]
-        (swap! parking-lot-state (fn [old-state] (merge old-state updated-state))))
-      "No Space")
+        (swap! parking-lot-state (fn [old-state] (merge old-state updated-state)))
+        (reset! is-parking-full false))
+      (reset! is-parking-full true))
     "Invalid Vehicle Type"))
 
-(defn exit-park [veh-num]
+(defn unpark [veh-num]
   (let [updated-state (reduce-kv
                        (fn [acc k v]
                          (assoc acc k (mapv
@@ -71,19 +73,13 @@
   ;; (assoc {} (keyword (str 1)) (into [] (range 4)))
 
   @parking-lot-state
+  @is-parking-full
+  (reset! is-parking-full false)
   (swap! parking-lot-state (fn [state] (apply assoc state [:0 [] :1 []])))
 
   (create-parking-lot 4 4)
-  (map (fn [[k v]] (park k v)) [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"}])
-  (park "bus" "UP32DD5000")
+  (park "bus" "UP32DD5001")
+  (unpark "UP32DD5000")
 
-  (exit-park "UP32DD5000")
-
-  (map (fn [a] (for [[k v] a] (print k v)))
-       [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"}])
-  
-
-  (key (seq {:a "b"}))
-
-  (key (apply clojure.lang.MapEntry. {:bus "UP32DD5000"}))
-  )
+  (let [parking-queue [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"} {:bus "UP32DD12345"} {:bus "UP32DD12345"}]]
+    (for [a parking-queue] (let [[k v] (first a)] (if (not @is-parking-full) (park k v) "Parking Lot full")))))
