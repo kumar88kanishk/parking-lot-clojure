@@ -74,7 +74,16 @@
   (swap! parking-lot-state (fn [state] (apply assoc state [:0 [] :1 []])))
 
   (create-parking-lot 4 4)
-
+  (map (fn [[k v]] (park k v)) [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"}])
   (park "bus" "UP32DD5000")
 
-  (exit-park "UP32DY3659"))
+  (exit-park "UP32DD5000")
+
+  (map (fn [a] (for [[k v] a] (print k v)))
+       [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"}])
+  
+
+  (key (seq {:a "b"}))
+
+  (key (apply clojure.lang.MapEntry. {:bus "UP32DD5000"}))
+  )
