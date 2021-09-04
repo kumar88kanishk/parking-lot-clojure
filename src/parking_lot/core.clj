@@ -50,8 +50,8 @@
       (let [updated-state (update-in @parking-lot-state [space]
                                      (fn [current-state] (into [] (new-parking-state weight veh-num current-state))))]
         (swap! parking-lot-state (fn [old-state] (merge old-state updated-state)))
-        (reset! is-parking-full false))
-      (reset! is-parking-full true))
+        (not (reset! is-parking-full false)))
+      (not (reset! is-parking-full true)))
     "Invalid Vehicle Type"))
 
 (defn unpark [veh-num]
@@ -78,8 +78,8 @@
   (swap! parking-lot-state (fn [state] (apply assoc state [:0 [] :1 []])))
 
   (create-parking-lot 4 4)
-  (park "bus" "UP32DD5001")
+  (park "car" "UP32DD5001")
   (unpark "UP32DD5000")
 
   (let [parking-queue [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"} {:bus "UP32DD12345"} {:bus "UP32DD12345"}]]
-    (for [a parking-queue] (let [[k v] (first a)] (if (not @is-parking-full) (park k v) "Parking Lot full")))))
+    (for [a parking-queue] (let [[k v] (first a)] (park k v)))))
