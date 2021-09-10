@@ -1,95 +1,75 @@
 (ns parking-lot.core)
+(def default-lot-state {:floors []
+                        :veh-size {:cycle 1
+                                   :car 2
+                                   :bus 4}})
 
-(def parking-lot-state (atom {}))
-(def is-parking-full (atom false))
+(defn create-parking-lot [m n lot-state]
+  (assoc lot-state :floors (repeat m (repeat n nil))))
 
-(def parking-lot-bindings
-  {:cycle 1
-   :car 2
-   :bus 4})
+(defn get-veh-weight [veh-type lot-state] (get-in lot-state [:veh-size (keyword veh-type)]))
 
-(defn create-parking-lot [m n]
-  (swap! parking-lot-state (fn [s]
-                             (reduce (fn [coll item]
-                                       (assoc coll (keyword (str item)) (into [] (take n (repeat nil)))))
-                                     {}
-                                     (range m)))))
 
-(defn veh-weight [veh-type] (get parking-lot-bindings (keyword veh-type)))
-
-(defn search-level [weight]
-  (let [search-level (reduce-kv
-                      (fn [acc k v]
-                        (let [availability (count (filter nil? v))]
-                          (if (<= weight availability) (reduced k) acc)))
-                      nil
-                      @parking-lot-state)]
-    search-level))
-
-(defn new-parking-state [weight veh-num cs]
-  (loop [current cs
+(defn park-on-floor [weight veh-num floor-space]
+  (loop [current-spaces floor-space
          prevs []
          avail []]
 
-    (if (empty? current)
+    (if (empty? current-spaces)
       (concat prevs avail)
-      (if (nil? (first current))
+      (if (nil? (first current-spaces))
                                   ;; space is available
-        (let [new-avail (conj avail (first current))]
+        (let [new-avail (conj avail (first current-spaces))]
           (if (= (count new-avail) weight)
-            (concat prevs (repeat weight {:num veh-num}) (next current))
-            (recur (next current) prevs (concat avail (take 1 current)))))
+            (concat prevs (repeat weight {:num veh-num}) (next current-spaces))
+            (recur (next current-spaces) prevs (concat avail (take 1 current-spaces)))))
                                   ;; space not found
-        (recur (next current)
-               (concat prevs avail (take 1 current))
+        (recur (next current-spaces)
+               (concat prevs avail (take 1 current-spaces))
                [])))))
 
-(defn park [veh-type veh-num]
-  (if-let [weight (veh-weight veh-type)]
-    (if-let [space (search-level weight)]
-      (let [updated-state (update-in @parking-lot-state [space]
-                                     (fn [current-state] (into [] (new-parking-state weight veh-num current-state))))]
-        (swap! parking-lot-state (fn [old-state] (merge old-state updated-state)))
-        (not (reset! is-parking-full false))
-        "Parked")
-      (do
-        (reset! is-parking-full true)
-        "No Parking"))
-    "Invalid Vehicle Type"))
+(defn park [lot-state veh-type veh-num]
+  (let [weight (get-veh-weight veh-type lot-state)
+        new-floors (loop [upcoming-floors (:floors lot-state)
+                          prev-floors []]
+                     (if upcoming-floors
+                       (let [current-floor (first upcoming-floors)
+                             new-floor (park-on-floor weight veh-num current-floor)]
+                         (if (= current-floor new-floor)
+                           (recur (next upcoming-floors) (conj prev-floors current-floor))
+                           (concat prev-floors [new-floor] (rest upcoming-floors))))
+                       prev-floors))]
+    (if (= new-floors (:floors lot-state))
+      [false lot-state]
+      [true (assoc lot-state :floors new-floors)])))
 
-(defn unpark [veh-num]
-  (let [updated-state (reduce-kv
-                       (fn [acc k v]
-                         (assoc acc k (mapv
-                                       (fn [item] (if (= (get item :num) veh-num)
-                                                    nil
-                                                    item))
-                                       v)))
-                       {}
-                       @parking-lot-state)]
-    (if (= @parking-lot-state updated-state)
-      "No Vehicle Found"
-      (swap! parking-lot-state (fn [old-state] (merge old-state updated-state))))))
+(defn unpark [lot-state veh-num]
+  (let [new-floors (map (fn [floor]
+                          (map
+                           (fn [space]
+                             (if (= (get space :num) veh-num)
+                               nil
+                               space))
+                           floor))
+                        (:floors lot-state))]
+    (assoc lot-state :floors new-floors)))
 
-(defn can-park? [] (not @is-parking-full))
-
-(defn park-vehicle [type num]
-  (if can-park? (park type num) can-park?))
+(defn park-vehicle [lot-state type veh-num]
+  (let [[did-park? new-lot-state] (park lot-state type veh-num)]
+    (if did-park?
+      (println "Parked " veh-num)
+      (println "Not parked " veh-num))
+    new-lot-state))
 
 
 (comment
+  (def lot-state-atom (atom (create-parking-lot 2 4 default-lot-state)))
+  @lot-state-atom
 
-  ;; (assoc {} (keyword (str 1)) (into [] (range 4)))
+  (swap! lot-state-atom park-vehicle "bus" "UP32DD3659")
+  (swap! lot-state-atom park-vehicle "car" "CAAAR")
+  (swap! lot-state-atom park-vehicle "car" "CAAAR1")
+  (swap! lot-state-atom park-vehicle "bus" "BUS!1")
+  (swap! lot-state-atom park-vehicle "cycle" "CYCLE1")
+  (swap! lot-state-atom unpark "UP32DD3659"))
 
-  @parking-lot-state
-  @is-parking-full
-  can-park?
-  (reset! is-parking-full false)
-  (swap! parking-lot-state (fn [state] (apply assoc state [:0 [] :1 []])))
-
-  (create-parking-lot 4 4)
-  (park-vehicle "car" "UP32DD5001")
-  (unpark "UP32DD5000")
-
-  (let [parking-queue [{:bus "UP32DD5000"} {:car "UP32DD123"} {:bus "UP32DD1234"} {:bus "UP32DD12345"} {:bus "UP32DD12345"} {:bus "UP32DD12345"}]]
-    (for [a parking-queue] (let [[k v] (first a)] (park-vehicle k v)))))
